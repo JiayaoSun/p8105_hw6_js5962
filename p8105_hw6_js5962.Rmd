@@ -37,16 +37,94 @@ scale_fill_discrete = scale_fill_viridis_d
 Import and clean the data
 
 ```{r clean}
+race = c("White", "Black", "Asian", "Puerto_Rican", "Other", "Unkown") 
 birthweight_df = 
   read_csv("birthweight.csv") %>%
   #convert numeric to factor
   mutate(
     babysex = factor(recode(babysex, `1` = "male", `2` = "female")),
     malform = factor(recode(malform, `0` = "absent", `1` = "present")),
-    frace = factor(recode(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other", `9` = "Unknown")),
-    mrace = factor(recode(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other"))
+    frace = factor(race[frace]),
+    mrace = factor(race[mrace])
   ) %>%
+  #pnumlbw = 0, pnumsga = 0
+  dplyr::select(-pnumlbw, -pnumsga) %>% 
   #check for missing data
   drop_na()
 ```
 
+To find out a fittest regression model, I would use stepwise regression here, for both forward and backward selection.p value should be smaller than 0.05.
+
+```{r backward}
+# fit regression using all predictors
+mult_fit = lm(bwt ~ ., data = birthweight_df)
+summary(mult_fit)
+
+#use one function
+Finalstep = stepAIC(mult_fit, direction = 'both', trace = FALSE, k =  3.8415)
+summary(Finalstep)  
+```
+
+Therefore, we choose babysexmale, bhead, blength, delwt, gaweeks, mheight, mrace, parity, ppwt and smoken as the significant factors.
+
+Then show a plot of model residuals against fitted values.
+
+```{r residual_fit}
+birthweight_df %>% 
+  add_predictions(Finalstep) %>% 
+  add_residuals(Finalstep) %>% 
+  ggplot(aes(x = pred, y = resid, alpha = 0.1)) +
+  geom_point(color = "darkblue") +
+  ggtitle("residuals against fitted values")
+```
+
+Sample
+
+```{r sampling}
+birthweight_cv =
+  crossv_mc(birthweight_df, 80) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Next, Fit and compare the models
+
+```{r compare_models}
+fit_df =
+  birthweight_cv %>% 
+  mutate(
+    Finalstep = 
+      map(.x = train, ~stepAIC(lm(bwt ~ ., data = .x), direction = "both", trace = FALSE)),
+    bl_ges = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    bh_bl_sex = map(.x = train, ~lm(bwt ~ bhead + blength + babysex + bhead * blength + bhead * babysex + blength * babysex + bhead * blength * babysex, data = .x))
+  ) %>% 
+  mutate(
+    rmsefinal = map2_dbl(.x = Finalstep,.y = test, ~rmse(model = .x, data = .y)),
+    rmsebl = map2_dbl(.x = bl_ges,.y = test, ~rmse(model = .x, data = .y)),
+    rmsebh = map2_dbl(.x = bh_bl_sex,.y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Then we can draw the plot.
+
+```{r violinplot}
+fit_df %>% 
+  dplyr::select(starts_with("rmse")) %>% 
+  pivot_longer(
+    rmsefinal:rmsebh,
+    names_to = "model",
+     values_to = "rmse", 
+     names_prefix = "rmse"
+   ) %>%
+   mutate(
+     model = fct_inorder(model)
+     ) %>% 
+  ggplot(aes(x = model, y = rmse, fill = model, alpha = 0.5)) +
+  geom_violin() +
+  scale_x_discrete(labels = c("stepwise", "length&gestational", "head&length&sex")) +
+  ggtitle("Comparison between three models") +
+  scale_fill_discrete(labels = c("stepwise", "length&gestational", "head&length&sex")) +
+  ylim(200, 400)
+```
