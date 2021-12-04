@@ -1,0 +1,52 @@
+---
+title: "p8105_hw6_js5962"
+author: "Jiayao Sun"
+data: "12/03/2021"
+output: html_document
+---
+
+```{r setup, echo = FALSE}
+library(tidyverse)
+library(viridis)
+library(modelr)
+library(mgcv)
+library(MASS)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+knitr::opts_chunk$set(
+  fig.width = 8,
+  fig.height = 6,
+  out.width = "90%",
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE
+)
+
+options(
+  ggplot2.continuous.color = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_color_discrete = scale_color_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+## Problem 1
+
+Import and clean the data
+
+```{r clean}
+birthweight_df = 
+  read_csv("birthweight.csv") %>%
+  #convert numeric to factor
+  mutate(
+    babysex = factor(recode(babysex, `1` = "male", `2` = "female")),
+    malform = factor(recode(malform, `0` = "absent", `1` = "present")),
+    frace = factor(recode(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other", `9` = "Unknown")),
+    mrace = factor(recode(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other"))
+  ) %>%
+  #check for missing data
+  drop_na()
+```
+
