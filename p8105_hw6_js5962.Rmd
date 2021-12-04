@@ -128,3 +128,109 @@ fit_df %>%
   scale_fill_discrete(labels = c("stepwise", "length&gestational", "head&length&sex")) +
   ylim(200, 400)
 ```
+
+## Problem 2
+
+Firstly, we import the weather data by chunk given.
+
+```{r import data}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  dplyr::select(name, id, everything())
+```
+
+Do the bootstrap
+
+```{r bootstrap, warning = FALSE}
+weather_boot =
+  weather_df %>% 
+  bootstrap(n = 5000) %>% 
+  mutate(
+    model = map(.x = strap, ~lm(tmax ~ tmin, data = .x)),
+    result_r = map(model, broom::glance),
+    result_log = map(model, broom::tidy)
+   ) %>% 
+  dplyr::select(.id, result_r, result_log) %>% 
+  unnest(result_r, result_log)
+```
+
+
+Firstly, let's calculate the r square.
+
+
+```{r r-square}
+r_square =
+  weather_boot %>% 
+  filter(term == "tmin") %>% 
+  dplyr::select(r.squared) 
+```
+
+Then, make the density plot for r square.
+```{r density_r}
+r_square %>% 
+  ggplot(aes(x = r.squared)) +
+  geom_density() + 
+  xlab("r square") +
+  ggtitle("Distribution of r square") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The density plot of r square is nearly a normal distribution with average rounding 0.912. It is slightly left skewed because the right side decreases in a steeper line. Since r square is near to 1, the model would fit the data.
+
+For 95% confidence interval.
+
+
+```{r CI_r}
+r_square %>% 
+  summarize(
+    "2.5%" = quantile(r.squared, 0.025),
+    "97.5%" = quantile(r.squared,0.975)
+  ) %>% 
+  knitr::kable()
+```
+
+Then we calculate the $log(\beta_{0} * \beta_{1})$
+
+```{r calculate}
+log_cal =
+  weather_boot %>% 
+  dplyr::select(.id, term, estimate) %>% 
+  pivot_wider(names_from = term,
+              values_from = estimate) %>% 
+  rename(intercept = "(Intercept)") %>% 
+  mutate(
+    log = log10(intercept*tmin)
+    )
+```
+
+Make a density plot for $log(\beta_{0} * \beta_{1})$
+
+```{r density_log}
+log_cal %>% 
+  ggplot(aes(x = log)) +
+  geom_density() + 
+  xlab("log(B_0 * B_1)") +
+  ggtitle("Distribution of log(B_0 * B_1)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+We can see from the plot that the distribution of $log(\beta_{0} * \beta_{1})$ approaches to the normal distribution, but slightly left-skewed. The highest density is around 0.876.
+
+Then, find the 95% confidence interval.
+
+```{r CI_log}
+log_cal %>% 
+  summarize(
+    "2.5%" = quantile(log, 0.025),
+    "97.5%" = quantile(log,0.975)
+  ) %>% 
+  knitr::kable()
+```
