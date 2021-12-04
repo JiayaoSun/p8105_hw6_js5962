@@ -2,7 +2,7 @@
 title: "p8105_hw6_js5962"
 author: "Jiayao Sun"
 data: "12/03/2021"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, echo = FALSE}
